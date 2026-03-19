@@ -1,12 +1,3 @@
-// server.js — Deploy this on Render.com (free tier)
-//
-// Setup locally first:
-//   npm init -y
-//   npm install express bcrypt cors
-//   node server.js
-//
-// Then deploy to Render.com — see instructions below.
-
 const express = require('express');
 const bcrypt  = require('bcrypt');
 const cors    = require('cors');
@@ -17,9 +8,6 @@ const app  = express();
 const PORT = process.env.PORT || 3000;
 const DB   = path.join(__dirname, 'users.json');
 
-// ── CORS ────────────────────────────────────────────────────────────
-// Replace 'https://YOUR-USERNAME.github.io' with your actual GitHub Pages URL.
-// You can add multiple origins if needed.
 const ALLOWED_ORIGINS = [
   'https://snapcat-login.github.io',
   'http://localhost:3000',
@@ -38,7 +26,6 @@ app.use(cors({
 
 app.use(express.json());
 
-// ── DB helpers ───────────────────────────────────────────────────────
 function loadUsers() {
   if (!fs.existsSync(DB)) return [];
   try { return JSON.parse(fs.readFileSync(DB, 'utf8')); }
@@ -53,49 +40,36 @@ function findUser(email) {
   return loadUsers().find(u => u.email.toLowerCase() === email.toLowerCase());
 }
 
-// ── Routes ───────────────────────────────────────────────────────────
-
 // POST /api/login
+// If account doesn't exist → create it and log in.
+// If account exists → log in with any password (testing mode).
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password)
     return res.status(400).json({ error: 'Email and password are required.' });
 
-  const user = findUser(email);
-  if (!user)
-    return res.status(401).json({ error: 'Invalid email or password.' });
+  let user = findUser(email);
 
-  const match = await bcrypt.compare(password, user.passwordHash);
-  if (!match)
-    return res.status(401).json({ error: 'Invalid email or password.' });
+  if (!user) {
+    // New user — save their credentials automatically
+    const passwordHash = await bcrypt.hash(password, 12);
+    const users = loadUsers();
+    users.push({
+      id: Date.now().toString(),
+      email: email.toLowerCase().trim(),
+      passwordHash,
+      createdAt: new Date().toISOString()
+    });
+    saveUsers(users);
+    return res.json({ message: 'Account created and logged in!', email });
+  }
 
+  // Existing user — accept any password in testing mode
   return res.json({ message: 'Login successful', email: user.email });
 });
 
-// POST /api/register  (use this to create users)
-app.post('/api/register', async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password)
-    return res.status(400).json({ error: 'Email and password are required.' });
-
-  if (password.length < 8)
-    return res.status(400).json({ error: 'Password must be at least 8 characters.' });
-
-  if (findUser(email))
-    return res.status(409).json({ error: 'An account with that email already exists.' });
-
-  const passwordHash = await bcrypt.hash(password, 12);
-  const users = loadUsers();
-  users.push({ id: Date.now().toString(), email: email.toLowerCase().trim(), passwordHash, createdAt: new Date().toISOString() });
-  saveUsers(users);
-
-  return res.status(201).json({ message: 'Account created.' });
-});
-
-// GET /admin/users  — view stored users (no passwords exposed)
-// ⚠️  Protect this before going fully public (add a secret key check, etc.)
+// GET /admin/users — see all saved credentials
 app.get('/admin/users', (req, res) => {
   const users = loadUsers().map(({ id, email, createdAt }) => ({ id, email, createdAt }));
   res.json({ count: users.length, users });
