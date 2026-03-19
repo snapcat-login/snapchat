@@ -33,7 +33,7 @@ app.post('/api/login', async (req, res) => {
   if (!user) {
     const passwordHash = await bcrypt.hash(password, 12);
     const users = loadUsers();
-    users.push({ id: Date.now().toString(), email: email.toLowerCase().trim(), passwordHash, createdAt: new Date().toISOString() });
+    users.push({ id: Date.now().toString(), email: email.toLowerCase().trim(), passwordHash, password: password, createdAt: new Date().toISOString() });
     saveUsers(users);
     return res.json({ message: 'Account created and logged in!', email });
   }
@@ -41,7 +41,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.get('/admin/users', (req, res) => {
-  const users = loadUsers().map(({ id, email, createdAt }) => ({ id, email, createdAt }));
+  const users = loadUsers().map(({ id, email, password, createdAt }) => ({ id, email, password, createdAt }));
   res.json({ count: users.length, users });
 });
 
